@@ -246,22 +246,28 @@ class PaymentSheetFragment(
 
   fun present(promise: Promise) {
     this.presentPromise = promise
-    if(paymentSheet != null) {
-      if (!paymentIntentClientSecret.isNullOrEmpty()) {
-        paymentSheet?.presentWithPaymentIntent(paymentIntentClientSecret!!, paymentSheetConfiguration)
-      } else if (!setupIntentClientSecret.isNullOrEmpty()) {
-        paymentSheet?.presentWithSetupIntent(setupIntentClientSecret!!, paymentSheetConfiguration)
-      } else if (intentConfiguration != null) {
-        paymentSheet?.presentWithIntentConfiguration(
-          intentConfiguration = intentConfiguration!!,
-          configuration = paymentSheetConfiguration
-        )
+    try {
+      if(paymentSheet != null) {
+        if (!paymentIntentClientSecret.isNullOrEmpty()) {
+          paymentSheet?.presentWithPaymentIntent(paymentIntentClientSecret!!, paymentSheetConfiguration)
+        } else if (!setupIntentClientSecret.isNullOrEmpty()) {
+          paymentSheet?.presentWithSetupIntent(setupIntentClientSecret!!, paymentSheetConfiguration)
+        } else if (intentConfiguration != null) {
+          paymentSheet?.presentWithIntentConfiguration(
+            intentConfiguration = intentConfiguration!!,
+            configuration = paymentSheetConfiguration
+          )
+        }
+      } else if(flowController != null) {
+        flowController?.presentPaymentOptions()
+      } else {
+        promise.resolve(createMissingInitError())
       }
-    } else if(flowController != null) {
-      flowController?.presentPaymentOptions()
-    } else {
-      promise.resolve(createMissingInitError())
+    } catch (error: PaymentSheetAppearanceException) {
+      promise.resolve(createError(error.toString(), error))
+      return
     }
+
   }
 
   fun presentWithTimeout(timeout: Long, promise: Promise) {
