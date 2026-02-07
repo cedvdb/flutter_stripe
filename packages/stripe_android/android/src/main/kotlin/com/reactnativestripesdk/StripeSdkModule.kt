@@ -20,7 +20,6 @@ import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.UiThreadUtil
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.module.annotations.ReactModule
-import com.flutter.stripe.invoke
 import com.reactnativestripesdk.addresssheet.AddressLauncherManager
 import com.reactnativestripesdk.customersheet.CustomerSheetManager
 import com.reactnativestripesdk.pushprovisioning.PushProvisioningProxy
@@ -74,10 +73,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-@OptIn(ReactNativeSdkInternal::class)
 @ReactModule(name = StripeSdkModule.NAME)
+@OptIn(ReactNativeSdkInternal::class)
 class StripeSdkModule(
-  val reactContext: ReactApplicationContext,
+  reactContext: ReactApplicationContext,
 ) : NativeStripeSdkModuleSpec(reactContext) {
   var cardFieldView: CardFieldView? = null
   var cardFormView: CardFormView? = null
@@ -180,14 +179,38 @@ class StripeSdkModule(
   }
 
   @SuppressLint("RestrictedApi")
-  override fun getTypedExportedConstants() =
-    mapOf(
+  override fun getTypedExportedConstants(): Map<String, Any> {
+    val packageInfo =
+      try {
+        reactApplicationContext.packageManager.getPackageInfo(
+          reactApplicationContext.packageName,
+          0,
+        )
+      } catch (e: Exception) {
+        null
+      }
+
+    return mapOf(
       "API_VERSIONS" to
         mapOf(
           "CORE" to ApiVersion.API_VERSION_CODE,
           "ISSUING" to PushProvisioningProxy.getApiVersion(),
         ),
+      "SYSTEM_INFO" to
+        mapOf(
+          "sdkVersion" to STRIPE_ANDROID_SDK_VERSION,
+          "osVersion" to android.os.Build.VERSION.RELEASE,
+          "deviceType" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+          "appName" to (
+            reactApplicationContext.applicationInfo
+              .loadLabel(
+                reactApplicationContext.packageManager,
+              ).toString()
+          ),
+          "appVersion" to (packageInfo?.versionName ?: ""),
+        ),
     )
+  }
 
   @ReactMethod
   override fun initialise(
@@ -1073,6 +1096,10 @@ class StripeSdkModule(
       promise.resolve(createMissingInitError())
       return
     }
+
+    // Use connectedAccountId from params if provided, otherwise fall back to global stripeAccountId
+    val accountId = getValOr(params, "connectedAccountId", null) ?: stripeAccountId
+
     unregisterStripeUIManager(financialConnectionsSheetManager)
     financialConnectionsSheetManager =
       FinancialConnectionsSheetManager(
@@ -1080,7 +1107,7 @@ class StripeSdkModule(
         clientSecret,
         FinancialConnectionsSheetManager.Mode.ForToken,
         publishableKey,
-        stripeAccountId,
+        accountId,
       ).also {
         registerStripeUIManager(it)
         it.present(promise)
@@ -1098,6 +1125,9 @@ class StripeSdkModule(
       return
     }
 
+    // Use connectedAccountId from params if provided, otherwise fall back to global stripeAccountId
+    val accountId = getValOr(params, "connectedAccountId", null) ?: stripeAccountId
+
     unregisterStripeUIManager(financialConnectionsSheetManager)
     financialConnectionsSheetManager =
       FinancialConnectionsSheetManager(
@@ -1105,7 +1135,7 @@ class StripeSdkModule(
         clientSecret,
         FinancialConnectionsSheetManager.Mode.ForSession,
         publishableKey,
-        stripeAccountId,
+        accountId,
       ).also {
         registerStripeUIManager(it)
         it.present(promise)
@@ -1485,5 +1515,8 @@ class StripeSdkModule(
 
   companion object {
     const val NAME = NativeStripeSdkModuleSpec.NAME
+
+    // Read the Stripe Android SDK version from gradle.properties at build time
+    private val STRIPE_ANDROID_SDK_VERSION = BuildConfig.STRIPE_ANDROID_SDK_VERSION
   }
 }
